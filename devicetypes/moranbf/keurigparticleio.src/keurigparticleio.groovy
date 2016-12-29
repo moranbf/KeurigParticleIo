@@ -26,6 +26,7 @@ metadata {
     	capability "Switch"
         capability "Actuator"
         capability "Polling"
+        capability "Sensor"
         // setup the commands to be executed, each is a function
         command "brewLarge"
         command "brewMedium"
@@ -43,14 +44,18 @@ metadata {
 			state ("off", label: '${name}', action: "switch.on", icon: "st.Appliances.appliances3", backgroundColor: "#ffffff", nextState: "on")
 		}
         // these will be added to the detail screen
-        standardTile("brewSmall", "device.switch", width: 2, height: 2) {
-    		state "brewSmall", label: "Small", icon: "st.Appliances.appliances14", backgroundColor: "#ffffff", action: "brewSmall"
+        standardTile("brewSmall", "device.sensor", width: 2, height: 2) {
+    		state ("brew", label: "Small", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewSmall", nextState: "brewing")
+            state ("brewing", label: "Small", icon: "st.Appliances.appliances14", backgroundColor: "#ffa500")
+            state ("waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: "")
         }
-        standardTile("brewMedium", "device.switch", width: 2, height: 2) {
-    		state "brewMedium", label: "Medium", icon: "st.Appliances.appliances14", backgroundColor: "#ffffff", action: "brewMedium"
+        standardTile("brewMedium", "device.sensor", width: 2, height: 2) {
+    		state "brew", label: "Medium", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewMedium"
+            state "waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: ""
         }
-        standardTile("brewLarge", "device.switch", width: 2, height: 2) {
-    		state "brewLarge", label: "Large", icon: "st.Appliances.appliances14", backgroundColor: "#ffffff", action: "brewLarge"
+        standardTile("brewLarge", "device.sensor", width: 2, height: 2) {
+    		state "brew", label: "Large", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewLarge"
+            state "waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: ""
 		}
         // this is where you define what is on the main screen and details screen
 		main ("switch")
@@ -66,58 +71,52 @@ def on() {
     log.error "Turning On"
     // this will send 1 to the particle power function 
 	particleTurnOnOff ('1')
-    // lets check the power state 1 for on 0 for off
-    def powerState = particlePowerState()
-    // if we are on update the state
-	if (powerState == 1) {
-    	sendEvent(name: "switch", value: "on", isStateChange: true, display: false, displayed: false)
-        def switchState = device.currentState("switch").value
-    	log.error "Device Status " + switchState
-		log.error "On function return val " + 0
-        return 0
-    	}
-    // if the powerstate is 0 its not on so make sure the switch state is set to off, this will also update the icon to off
-    else if  (powerState == 0){
-    	sendEvent(name: "switch", value: "off", isStateChange: true, display: false, displayed: false)
-        def switchState = device.currentState("switch").value
-    	log.error "Device Status " + switchState
-		log.error "On function return val " + -1
-        return -1
-    }
-}
-
+    sendEvent(name: "switch", value: "on", isStateChange: true, display: true, displayed: true)
+ 	poll()
+	}
 def off() {
     log.error "Turning off"
     // this will send 0 to the particle power function 
 	particleTurnOnOff ('0')
-    // lets check the power state 1 for on 0 for off
-    def powerState = particlePowerState()
-    // if we are off update the state
-	if (powerState == 0) {
-    	sendEvent(name: "switch", value: "off", isStateChange: true, display: false, displayed: false)
-        def switchState = device.currentState("switch").value
-    	log.error "Device Status " + switchState
-		log.error "Off function return val " + 0
-        return 0
-    	}
-    // otherwise we are out of sync so set the state to on
-    else if  (powerState == 1){
-    	sendEvent(name: "switch", value: "on", isStateChange: true, display: false, displayed: false)
-        def switchState = device.currentState("switch").value
-    	log.error "Device Status " + switchState
-		log.error "Off function return val " + -1
-        return -1
-    }
-}
+    sendEvent(name: "switch", value: "off", isStateChange: true, display: true, displayed: true)
+ 	poll()
+  	}
 // functions for brewing
 def brewLarge() {
-   particleBrew("large")
+   def waterStatus = particleWaterCheck()
+   if (waterStatus == 1){
+   		particleBrew("large")
+   		runIn(30, poll);
+   }
+   else{
+   poll();
+   }
+
 }
 def brewMedium() {
-   particleBrew("medium")
+   def waterStatus = particleWaterCheck()
+   if (waterStatus == 1){
+   		particleBrew("medium")
+   		def cmds = []
+		cmds << "delay 3000"
+        poll();
+   }
+   else{
+   poll();
+   }
 }
 def brewSmall() {
-   particleBrew("small")
+   def waterStatus = particleWaterCheck()
+   if (waterStatus == 1){
+   		particleBrew("small")
+   		def cmds = []
+		cmds << "delay 3000"
+        poll();
+   }
+   else{
+   poll();
+   }
+
 }
 // this will poll the device state
 def poll() {
@@ -127,16 +126,36 @@ def poll() {
    def powerState = particlePowerState()
    // Next check the switch state
    def switchState = device.currentState("switch").value
+   def waterState = device.currentState("sensor").value
+   def waterStatus = particleWaterCheck()
+
    log.error "Polled"
    // If particle powerstate and switchstate are mismatched fix it
    if (powerState == 1 && switchState == "off"){
    		log.error "Updating Power On"
    		sendEvent(name: "switch", value: "on", isStateChange: true, display: false, displayed: false)
    }
-   else if (powerState == 0 && switchState == "on"){
+   else if (powerState == 0  && switchState == "on"){
    		log.error "Updating Power Off"
    		sendEvent(name: "switch", value: "off", isStateChange: true, display: false, displayed: false)
    }
+   if (waterStatus == 1){
+   		log.error "Water Good"
+   		sendEvent(name: "sensor", value: "brew", isStateChange: true, display: false, displayed: false)
+   }
+   else if (waterStatus == 0 ){
+   		log.error "Water Low"
+     	sendEvent(name: "sensor", value: "waterLow", isStateChange: true, display: false, displayed: false)
+   }
+}
+
+// wrapper to chck on the water state
+private particleWaterCheck() {
+    //Spark Photon API Call
+	httpPost(
+		uri: "https://api.spark.io/v1/devices/${deviceId}/waterCheck",
+        body: [access_token: token, command: "a"],  
+	) {response -> return response.data.return_value}
 }
 
 // wrapper for particle function power
