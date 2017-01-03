@@ -46,16 +46,18 @@ metadata {
         // these will be added to the detail screen
         standardTile("brewSmall", "device.sensor", width: 2, height: 2) {
     		state ("brew", label: "Small", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewSmall", nextState: "brewing")
-            state ("brewing", label: "Small", icon: "st.Appliances.appliances14", backgroundColor: "#ffa500")
+            state ("brewing", label: "Brewing", icon: "st.Appliances.appliances14", backgroundColor: "#ffa500")
             state ("waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: "")
         }
         standardTile("brewMedium", "device.sensor", width: 2, height: 2) {
-    		state "brew", label: "Medium", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewMedium"
-            state "waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: ""
+    		state ("brew", label: "Medium", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewMedium", nextState: "brewing")
+            state ("brewing", label: "Brewing", icon: "st.Appliances.appliances14", backgroundColor: "#ffa500")
+            state ("waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: "")
         }
         standardTile("brewLarge", "device.sensor", width: 2, height: 2) {
-    		state "brew", label: "Large", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewLarge"
-            state "waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: ""
+    		state ("brew", label: "Large", icon: "st.Appliances.appliances14", backgroundColor: "#79b821", action: "brewLarge", nextState: "brewing")
+            state ("brewing", label: "Brewing", icon: "st.Appliances.appliances14", backgroundColor: "#ffa500")
+            state ("waterLow", label: "LowWater", icon: "st.Appliances.appliances14", backgroundColor: "#ff0000", action: "")
 		}
         // this is where you define what is on the main screen and details screen
 		main ("switch")
@@ -81,12 +83,23 @@ def off() {
     sendEvent(name: "switch", value: "off", isStateChange: true, display: true, displayed: true)
  	poll()
   	}
+    
+def brewReady(){
+	def waterStatus = particleWaterCheck()
+   	if (waterStatus == 1){
+		sendEvent(name: "sensor", value: "brew", isStateChange: true, display: true, displayed: true)
+    }
+    else{
+    poll();
+    }
+}
 // functions for brewing
 def brewLarge() {
    def waterStatus = particleWaterCheck()
    if (waterStatus == 1){
    		particleBrew("large")
-   		runIn(30, poll);
+        // Change the button from brewing back back to green in 70 seconds
+   		runIn(70, brewReady);
    }
    else{
    poll();
@@ -97,9 +110,7 @@ def brewMedium() {
    def waterStatus = particleWaterCheck()
    if (waterStatus == 1){
    		particleBrew("medium")
-   		def cmds = []
-		cmds << "delay 3000"
-        poll();
+        runIn(45,brewReady);
    }
    else{
    poll();
@@ -109,9 +120,7 @@ def brewSmall() {
    def waterStatus = particleWaterCheck()
    if (waterStatus == 1){
    		particleBrew("small")
-   		def cmds = []
-		cmds << "delay 3000"
-        poll();
+ 		runIn(30, brewReady);
    }
    else{
    poll();
@@ -139,11 +148,11 @@ def poll() {
    		log.error "Updating Power Off"
    		sendEvent(name: "switch", value: "off", isStateChange: true, display: false, displayed: false)
    }
-   if (waterStatus == 1){
+   if (waterStatus == 1 && waterState == "waterLow" ){
    		log.error "Water Good"
    		sendEvent(name: "sensor", value: "brew", isStateChange: true, display: false, displayed: false)
    }
-   else if (waterStatus == 0 ){
+   else if (waterStatus == 0 && waterState == "brew" ){
    		log.error "Water Low"
      	sendEvent(name: "sensor", value: "waterLow", isStateChange: true, display: false, displayed: false)
    }
